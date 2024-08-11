@@ -448,6 +448,7 @@ class AdversarialRunner(object):
                       level_sampler=None, 
                       update_level_sampler=False,
                       discard_grad=False, 
+                      kl_dict=None, 
                       edit_level=False,
                       num_edits=0, 
                       fixed_seeds=None):
@@ -616,11 +617,15 @@ class AdversarialRunner(object):
             if level_sampler and update_level_sampler:
                 level_sampler.update_with_rollouts(agent.storage)
 
-            value_loss, action_loss, dist_entropy, info = agent.update(discard_grad=discard_grad)
+            value_loss, action_loss, dist_entropy, info = agent.update(discard_grad=discard_grad, kl_dict=kl_dict)
 
             if level_sampler and update_level_sampler:
                 level_sampler.after_update()
 
+            if 'kl_loss' in info.keys():
+                kl_loss = info.pop('kl_loss')
+                rollout_info.update({'kl_loss': kl_loss})
+                
             rollout_info.update({
                 'value_loss': value_loss,
                 'action_loss': action_loss,
@@ -704,6 +709,13 @@ class AdversarialRunner(object):
             level_sampler=self._get_level_sampler('agent')[0],
             update_level_sampler=False)
 
+        kl_dict_agent = None
+        if self.is_training and self.args.use_behavioural_cloning:
+            if ((self.student_grad_updates+1) % self.args.kl_update_step == 0):
+                kl_dict_agent = {}
+                adversary_agent.eval()
+                kl_dict_agent['antagonist_model'] = adversary_agent.algo.actor_critic
+                
         # Run agent episodes
         level_sampler, is_updateable = self._get_level_sampler('agent')
         agent_info = self.agent_rollout(
@@ -713,7 +725,11 @@ class AdversarialRunner(object):
             level_replay=level_replay,
             level_sampler=level_sampler,
             update_level_sampler=is_updateable,
-            discard_grad=student_discard_grad)
+            discard_grad=student_discard_grad,
+            kl_dict=kl_dict_agent)
+
+        if kl_dict_agent is not None:
+            adversary_agent.train()
 
         # Use a separate PLR curriculum for the antagonist
         if level_replay and self.is_paired and (args.protagonist_plr == args.antagonist_plr):
@@ -730,6 +746,15 @@ class AdversarialRunner(object):
         if self.is_paired:
             # Run adversary agent episodes
             level_sampler, is_updateable = self._get_level_sampler('adversary_agent')
+            
+            kl_dict_adv_agent = None
+            if not self.args.use_kl_only_agent:
+                if self.is_training and self.args.use_behavioural_cloning:
+                    if ((self.student_grad_updates+1) % self.args.kl_update_step == 0):
+                        kl_dict_adv_agent = {}
+                        agent.eval()
+                        kl_dict_adv_agent['antagonist_model'] = agent.algo.actor_critic
+                        
             adversary_agent_info = self.agent_rollout(
                 agent=adversary_agent, 
                 num_steps=self.agent_rollout_steps, 
@@ -737,7 +762,11 @@ class AdversarialRunner(object):
                 level_replay=level_replay,
                 level_sampler=level_sampler,
                 update_level_sampler=is_updateable,
-                discard_grad=student_discard_grad)
+                discard_grad=student_discard_grad,
+                kl_dict=kl_dict_adv_agent)
+
+            if kl_dict_adv_agent is not None:
+                agent.train()
 
         # Sample whether the decision to edit levels
         edit_level = self._should_edit_level() and level_replay
@@ -871,6 +900,9 @@ class AdversarialRunner(object):
             'adversary_value_loss': adversary_agent_info['value_loss'],
             'adversary_pg_loss': adversary_agent_info['action_loss'],
             'adversary_dist_entropy': adversary_agent_info['dist_entropy'],
+            
+            'kl_loss_advagent_agent': agent_info.get('kl_loss', None),
+            'kl_loss_agent_advagent': adversary_agent_info.get('kl_loss', None),
         })
 
         if args.log_grad_norm:
