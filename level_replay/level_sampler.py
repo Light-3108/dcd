@@ -146,7 +146,7 @@ class LevelSampler():
             proportion_seen = (len(self.seeds) - num_unseen)/len(self.seeds)
             return proportion_seen
 
-    def update_with_rollouts(self, rollouts):
+    def update_with_rollouts(self, rollouts, external_scores=None):
         if self.strategy in ['random', 'off']:
             return
 
@@ -180,17 +180,20 @@ class LevelSampler():
         else:
             raise ValueError(f'Unsupported strategy, {self.strategy}')
 
-        self._update_with_rollouts(rollouts, score_function)
+        if external_scores is not None:
+            score_function = self._average_external_score
 
-    def update_seed_score(self, actor_index, seed, score, max_score, num_steps):
+        self._update_with_rollouts(rollouts, score_function, external_scores=external_scores)
+
+    def update_seed_score(self, actor_index, seed, score, max_score, num_steps, running_mean=True):
         if self.sample_full_distribution and seed in self.staging_seed_set:
-            score, seed_idx = self._partial_update_seed_score_buffer(actor_index, seed, score, num_steps, done=True)
+            score, seed_idx = self._partial_update_seed_score_buffer(actor_index, seed, score, num_steps, done=True, running_mean=running_mean)
         else:
-            score, seed_idx = self._partial_update_seed_score(actor_index, seed, score, max_score, num_steps, done=True)
+            score, seed_idx = self._partial_update_seed_score(actor_index, seed, score, max_score, num_steps, done=True, running_mean=running_mean)
 
         return score, seed_idx
 
-    def _partial_update_seed_score(self, actor_index, seed, score, max_score, num_steps, done=False):
+    def _partial_update_seed_score(self, actor_index, seed, score, max_score, num_steps, done=False, running_mean=True):
         seed_idx = self.seed2index.get(seed, -1)
         if seed_idx < 0:
             return 0, None
@@ -199,7 +202,9 @@ class LevelSampler():
         partial_num_steps = self.partial_seed_steps[actor_index][seed_idx]
 
         running_num_steps = partial_num_steps + num_steps
-        merged_score = partial_score + (score - partial_score)*num_steps/float(running_num_steps)
+        merged_score = partial_score + (score - partial_score)*num_steps
+        if running_mean:
+            merged_score = merged_score / float(running_num_steps)
         merged_max_score = max(partial_max_score, max_score)
 
         if done:
@@ -227,14 +232,16 @@ class LevelSampler():
             else:
                 return self.seed_scores.argmin()
 
-    def _partial_update_seed_score_buffer(self, actor_index, seed, score, num_steps, done=False):
+    def _partial_update_seed_score_buffer(self, actor_index, seed, score, num_steps, done=False, running_mean=True):
         seed_idx = -1
         self.seed2actor[seed].add(actor_index)
         partial_score = self.partial_seed_scores_buffer[actor_index].get(seed, 0)
         partial_num_steps = self.partial_seed_steps_buffer[actor_index].get(seed, 0)
 
         running_num_steps = partial_num_steps + num_steps
-        merged_score = partial_score + (score - partial_score)*num_steps/float(running_num_steps)
+        merged_score = partial_score + (score - partial_score)*num_steps
+        if running_mean:
+            merged_score = merged_score / float(running_num_steps)
 
         if done:
             # Move seed into working seed data structures
@@ -385,6 +392,21 @@ class LevelSampler():
 
         return mean_score, max_score
 
+    def _average_external_score(self, **kwargs):
+        """
+        Currently assumes sparse reward s.t. reward is 0 everywhere except final step
+        Called using PAIRED's regret estimate as the scoring function
+        """
+        done = kwargs['done']
+        external_scores = kwargs['external_scores'] # (1,)
+        
+        if done:
+            mean_score = external_scores.item()
+        else:
+            mean_score = 0
+
+        return mean_score, mean_score
+    
     def _average_grounded_positive_value_loss(self, **kwargs):
         """
         Currently assumes sparse reward s.t. reward is 0 everywhere except final step
@@ -483,7 +505,7 @@ class LevelSampler():
     def _has_working_seed_buffer(self):
         return not self.sample_full_distribution or (self.sample_full_distribution and self.seed_buffer_size > 0)
 
-    def _update_with_rollouts(self, rollouts, score_function):
+    def _update_with_rollouts(self, rollouts, score_function, external_scores=None):
         if not self._has_working_seed_buffer:
             return
 
@@ -512,6 +534,8 @@ class LevelSampler():
                 episode_logits = policy_logits[start_t:t,actor_index]
                 score_function_kwargs['episode_logits'] = torch.log_softmax(episode_logits, -1)
                 score_function_kwargs['seed'] = seed_t
+                if external_scores is not None:
+                    score_function_kwargs['external_scores'] = external_scores[actor_index]
 
                 if self.requires_value_buffers:
                     score_function_kwargs['returns'] = rollouts.returns[start_t:t,actor_index]
@@ -540,7 +564,7 @@ class LevelSampler():
 
                     score, max_score = score_function(**score_function_kwargs)
                     num_steps = len(episode_logits)
-                    _, seed_idx = self.update_seed_score(actor_index, seed_t, score, max_score, num_steps)
+                    _, seed_idx = self.update_seed_score(actor_index, seed_t, score, max_score, num_steps, running_mean=(external_scores is not None))
 
                     # Track grounded value for future reference
                     if seed_idx is not None and self.grounded_values is not None and grounded_value is not None:
@@ -557,6 +581,8 @@ class LevelSampler():
                 episode_logits = policy_logits[start_t:,actor_index]
                 score_function_kwargs['episode_logits'] = torch.log_softmax(episode_logits, -1)
                 score_function_kwargs['seed'] = seed_t
+                if external_scores is not None:
+                    score_function_kwargs['external_scores'] = external_scores[actor_index]
 
                 if self.requires_value_buffers:
                     score_function_kwargs['returns'] = rollouts.returns[start_t:,actor_index]
@@ -573,9 +599,9 @@ class LevelSampler():
                 num_steps = len(episode_logits)
 
                 if self.sample_full_distribution and seed_t in self.staging_seed_set:
-                    self._partial_update_seed_score_buffer(actor_index, seed_t, score, num_steps)
+                    self._partial_update_seed_score_buffer(actor_index, seed_t, score, num_steps, running_mean=(external_scores is not None))
                 else:
-                    self._partial_update_seed_score(actor_index, seed_t, score, max_score, num_steps)
+                    self._partial_update_seed_score(actor_index, seed_t, score, max_score, num_steps, running_mean=(external_scores is not None))
 
     def after_update(self):
         if not self._has_working_seed_buffer:

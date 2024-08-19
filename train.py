@@ -76,7 +76,7 @@ if __name__ == '__main__':
 
     agent = make_agent(name='agent', env=venv, args=args, device=device)
     adversary_agent, adversary_env = None, None
-    if is_paired:
+    if is_paired or args.use_accel_paired:
         adversary_agent = make_agent(name='adversary_agent', env=venv, args=args, device=device)
 
     if is_training_env:
@@ -176,6 +176,13 @@ if __name__ == '__main__':
             if evaluator is not None and (j % args.test_interval == 0 or j == num_updates - 1):
                 test_stats = evaluator.evaluate(train_runner.agents['agent'])
                 stats.update(test_stats)
+                if args.use_accel_paired:
+                    adv_test_stats = evaluator.evaluate(train_runner.agents['adversary_agent'])
+                    curr_keys = list(adv_test_stats.keys())
+                    for curr_key in curr_keys:
+                        adv_test_stats[f"advagent_{curr_key}"] = adv_test_stats[curr_key]
+                        adv_test_stats.pop(curr_key, None)
+                    stats.update(adv_test_stats)
             else:
                 stats.update({k:None for k in evaluator.get_stats_keys()})
 
