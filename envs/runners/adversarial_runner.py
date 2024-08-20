@@ -601,7 +601,6 @@ class AdversarialRunner(object):
                                 set_obs_at_index(obs, obs_i, i)
                                 next_level_seeds[i] = level_seed
                                 rollout_info['solved_idx'][i] = True
-                                # self.current_level_seeds[i] = level_seed
 
                         # If using ALP-GMM, sample next level
                         if self.is_alp_gmm:
@@ -947,7 +946,7 @@ class AdversarialRunner(object):
                 else:
                     # take top 1
                     if self.use_accel_paired:
-                        easy = np.argmin((regret_score.detach().cpu().numpy()).flatten())
+                        easy = np.argmax((regret_score.detach().cpu().numpy()).flatten())
                     else:
                         easy = np.argmax((agent_info['mean_return'].detach().cpu().numpy() - agent_info['batched_value_loss'].detach().cpu().numpy()).flatten())
                     fixed_seeds = [env_info[easy]] * args.num_processes
