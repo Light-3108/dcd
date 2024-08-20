@@ -10,7 +10,9 @@ from models import \
     CarRacingNetwork, \
     CarRacingBezierAdversaryEnvNetwork, \
     BipedalWalkerStudentPolicy, \
-    BipedalWalkerAdversaryPolicy
+    BipedalWalkerAdversaryPolicy, \
+    BipedalWalkerRecurrentStudentPolicy, \
+    BipedalWalkerRecurrentAdversaryPolicy
 
 def model_for_multigrid_agent(
     env,
@@ -93,20 +95,36 @@ def model_for_car_racing_agent(
 def model_for_bipedalwalker_agent(
     env,
     agent_type='agent',
-    recurrent_arch=False):
+    recurrent_arch=False,
+    use_lstm=False):
     if 'adversary_env' in agent_type:
         adversary_observation_space = env.adversary_observation_space
         adversary_action_space = env.adversary_action_space
 
-        model = BipedalWalkerAdversaryPolicy(
+        if use_lstm:
+            model = BipedalWalkerRecurrentAdversaryPolicy(
                 observation_space=adversary_observation_space,
-                action_space=adversary_action_space)
+                action_space=adversary_action_space,
+                recurrent_hidden_size=256
+            )
+        else:
+            model = BipedalWalkerAdversaryPolicy(
+                    observation_space=adversary_observation_space,
+                    action_space=adversary_action_space)
 
     else:
-        model = BipedalWalkerStudentPolicy(
-            obs_shape=env.observation_space.shape,
-            action_space=env.action_space,
-            recurrent=recurrent_arch)
+        if use_lstm:
+            model = BipedalWalkerRecurrentStudentPolicy(
+                obs_shape=env.observation_space.shape,
+                action_space=env.action_space,
+                recurrent=recurrent_arch,
+                recurrent_hidden_size=256
+            )
+        else:
+            model = BipedalWalkerStudentPolicy(
+                obs_shape=env.observation_space.shape,
+                action_space=env.action_space,
+                recurrent=recurrent_arch)
 
     return model
 
@@ -124,7 +142,8 @@ def model_for_env_agent(
     adv_use_popart=False,
     use_categorical_adv=False,
     use_goal=False,
-    num_goal_bins=1):
+    num_goal_bins=1,
+    use_lstm=False):
     assert agent_type in ['agent', 'adversary_agent', 'adversary_env']
         
     if env_name.startswith('MultiGrid'):
@@ -150,7 +169,8 @@ def model_for_env_agent(
         model = model_for_bipedalwalker_agent(
             env=env,
             agent_type=agent_type,
-            recurrent_arch=recurrent_arch)
+            recurrent_arch=recurrent_arch,
+            use_lstm=use_lstm)
     else:
         raise ValueError(f'Unsupported environment {env_name}.')
 
@@ -196,7 +216,8 @@ def make_agent(name, env, args, device='cpu'):
         adv_use_popart=vars(args).get('adv_use_popart', False),
         use_categorical_adv=vars(args).get('use_categorical_adv', False),
         use_goal=vars(args).get('sparse_rewards', False),
-        num_goal_bins=vars(args).get('num_goal_bins', 1))
+        num_goal_bins=vars(args).get('num_goal_bins', 1),
+        use_lstm=vars(args).get('use_lstm', False))
 
     algo = None
     storage = None

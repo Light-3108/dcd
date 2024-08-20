@@ -171,6 +171,9 @@ def xpid_from_params(p, prefix=''):
     editing_prefix = ''
     if p['use_editor']:
         editing_prefix = f"-editor{p['level_editor_prob']}-{p['level_editor_method']}-n{p['num_edits']}-base{p['base_levels']}"
+    
+    if p['use_accel_paired']:
+        editing_prefix = f"{editing_prefix}-{p['accel_paired_score_function']}"
 
     timelimits = '-tl' if p['handle_timelimits'] else ''
     global_critic = '-global' if p['use_global_critic'] else ''
@@ -241,6 +244,9 @@ if __name__ == '__main__':
         'level_editor_method': 'random',
         'num_edits': 0,
         'base_levels': 'batch',
+        'use_accel_paired': False,
+        'accel_paired_score_function': 'paired',
+        'use_lstm': False,
         
         # Behavioural Cloning params
         'use_behavioural_cloning': False,

@@ -314,13 +314,26 @@ parser.add_argument(
     "--base_levels",
     type=str,
     default='batch',
-    choices=['batch', 'easy'],
+    choices=['batch', 'easy', 'hard'],
     help="What kind of replayed level under PLR do we edit?")
 parser.add_argument(
     "--num_edits",
     type=int,
     default=0.,
     help="Number of edits to make each time a level is mutated.")
+parser.add_argument(
+    "--use_accel_paired",
+    type=str2bool, nargs='?', const=True, default=False,
+    help='Whether to use paired regret estimate for level editor.')
+parser.add_argument(
+    "--accel_paired_score_function",
+    type=str, default="paired", choices=["paired", "flex_paired"],
+    help="Type of regret estimate for level editor"
+)
+parser.add_argument(
+    "--use_lstm",
+    type=str2bool, nargs='?', const=True, default=False,
+    help='Whether to use LSTM architecture for BipedalWalker models.')
 
 # BC arguments
 parser.add_argument(

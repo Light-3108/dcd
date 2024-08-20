@@ -61,7 +61,7 @@ class PPO():
         return total_norm
 
     def update(self, rollouts, discard_grad=False, kl_dict=None):
-        use_kl_loss = (kl_dict is not None) and (self.kl_loss_coef > 0.0)
+        use_kl_loss = (kl_dict is not None) and (self.kl_loss_coef > 0.0) and (discard_grad is False)
         
         if rollouts.use_popart:
             value_preds = rollouts.denorm_value_preds
