@@ -513,7 +513,7 @@ class AdversarialRunner(object):
 
         # Initialize first observation
         agent.storage.copy_obs_to_index(obs,0)
-        
+        agent.storage.obs_ds[0].copy_(obs['full_obs']) 
         rollout_info = {}
         rollout_returns = [[] for _ in range(args.num_processes)]
         
@@ -524,7 +524,8 @@ class AdversarialRunner(object):
             rollout_info.update({
                 'solved_idx': np.zeros(args.num_processes, dtype=np.bool)
             })
-            
+        
+        explorer_rewards = []
         for step in range(num_steps):
             if args.render:
                 self.venv.render_to_screen()
@@ -548,6 +549,31 @@ class AdversarialRunner(object):
                 obs, reward, done, infos = self.venv.step_env(_action, reset_random=reset_random)
                 if args.clip_reward:
                     reward = torch.clamp(reward, -args.clip_reward, args.clip_reward)
+            int_reward = torch.zeros_like(reward)
+            obs_ds = obs['full_obs']
+            diff_all = obs_ds.unsqueeze(0) - agent.storage.obs_ds # (257,num_process,3,15,15)
+
+            # will agent explore as much as possible, avoiding goal?
+
+            for i in range(len(done)): 
+                if done[i] == 1:
+                    agent.storage.step_env[i] = 0
+                else:
+                    actual_step_env = int(max(0, agent.storage.step_env[i] - 200))
+
+                    episode_start = int(step + 1 - agent.storage.step_env[i] + actual_step_env)
+                    diff = diff_all[max(0, episode_start):step+1][:, i, :, :]
+                    if episode_start < 0:
+                        if not len(diff):
+                            diff = diff_all[num_steps + episode_start: num_steps][:, i, :, :]
+                        else:
+                            diff = torch.cat((diff, diff_all[num_steps + episode_start:num_steps][:, i, :, :]), dim=0)
+                    neighbor_size = 3
+                    if len(diff) < 3:
+                        neighbor_size = len(diff)
+                    int_reward[i] = diff.flatten(start_dim=1).norm(p=2, dim=1).sort().values[int(neighbor_size-1)]
+                    if i == 0:
+                        explorer_rewards.append(int_reward[i].item())
 
             if not is_env and step >= num_steps - 1:
                 # Handle early termination due to cliffhanger rollout
@@ -628,7 +654,7 @@ class AdversarialRunner(object):
                 value, reward, masks, bad_masks, 
                 level_seeds=current_level_seeds,
                 cliffhanger_masks=cliffhanger_masks)
-
+            agent.storage.obs_ds[agent.storage.step].copy_(obs_ds)
             if level_sampler and level_replay:
                 self.current_level_seeds = next_level_seeds
 
@@ -637,6 +663,9 @@ class AdversarialRunner(object):
             self._update_plr_with_current_unseen_levels()
 
         rollout_info.update(self._get_rollout_return_stats(rollout_returns))
+        rollout_info.update({
+            'explorer_reward_mean': np.mean(explorer_rewards) if len(explorer_rewards) > 0 else 0.0
+        })
         if self.use_accel_paired:
             rollout_info['actor_seeds'] = actor_seeds
 
@@ -1076,6 +1105,7 @@ class AdversarialRunner(object):
             'total_student_grad_updates': self.student_grad_updates,
 
             'mean_agent_return': mean_agent_return,
+            'explorer_agent_return': agent_info['explorer_reward_mean'],
             'agent_value_loss': agent_info['value_loss'],
             'agent_pg_loss': agent_info['action_loss'],
             'agent_dist_entropy': agent_info['dist_entropy'],

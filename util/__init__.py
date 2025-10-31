@@ -138,47 +138,56 @@ def is_discrete_actions(env, adversary=False):
     else:
         return env.action_space.__class__.__name__ == 'Discrete'
 
-
 def _make_env(args):
-    env_kwargs = {'seed': args.seed}
-    if args.singleton_env:
-        env_kwargs.update({
-            'fixed_environment': True})
-    if args.env_name.startswith('CarRacing'):
-        env_kwargs.update({
-            'n_control_points': args.num_control_points,
-            'min_rad_ratio': args.min_rad_ratio,
-            'max_rad_ratio': args.max_rad_ratio,
-            'use_categorical': args.use_categorical_adv,
-            'use_sketch': args.use_sketch,
-            'clip_reward': args.clip_reward,
-            'sparse_rewards': args.sparse_rewards,
-            'num_goal_bins': args.num_goal_bins,
-        })
 
-    if args.env_name.startswith('CarRacing'):
-        # Hack: This TimeLimit sandwich allows truncated obs to be passed
-        # up the hierarchy with all necessary preprocessing.
-        env = gym_make(args.env_name, **env_kwargs)
-        max_episode_steps = env._max_episode_steps
-        reward_shaping = args.reward_shaping and not args.sparse_rewards
-        assert max_episode_steps % args.num_action_repeat == 0
-        return TimeLimit(CarRacingWrapper(env,
-                grayscale=args.grayscale, 
-                reward_shaping=reward_shaping,
-                num_action_repeat=args.num_action_repeat,
-                nstack=args.frame_stack,
-                crop=args.crop_frame), 
-            max_episode_steps=max_episode_steps//args.num_action_repeat)
-    elif args.env_name.startswith('MultiGrid'):
-        env = gym_make(args.env_name, **env_kwargs)
-        if args.use_global_critic or args.use_global_policy:
-            max_episode_steps = env._max_episode_steps
-            env = TimeLimit(MultiGridFullyObsWrapper(env),
-                max_episode_steps=max_episode_steps)
-        return env
-    else:
-        return gym_make(args.env_name, **env_kwargs)
+    env_kwargs = {'seed': args.seed}
+    env = gym_make(args.env_name, **env_kwargs)
+    try:
+        env = MultiGridFullyObsWrapper(env)  # wrap with fullobswrapper to get obs['full_obs'] along with partial obs
+    except Exception:
+        pass
+    return env
+
+# def _make_env(args):
+#     env_kwargs = {'seed': args.seed}
+#     if args.singleton_env:
+#         env_kwargs.update({
+#             'fixed_environment': True})
+#     if args.env_name.startswith('CarRacing'):
+#         env_kwargs.update({
+#             'n_control_points': args.num_control_points,
+#             'min_rad_ratio': args.min_rad_ratio,
+#             'max_rad_ratio': args.max_rad_ratio,
+#             'use_categorical': args.use_categorical_adv,
+#             'use_sketch': args.use_sketch,
+#             'clip_reward': args.clip_reward,
+#             'sparse_rewards': args.sparse_rewards,
+#             'num_goal_bins': args.num_goal_bins,
+#         })
+
+#     if args.env_name.startswith('CarRacing'):
+#         # Hack: This TimeLimit sandwich allows truncated obs to be passed
+#         # up the hierarchy with all necessary preprocessing.
+#         env = gym_make(args.env_name, **env_kwargs)
+#         max_episode_steps = env._max_episode_steps
+#         reward_shaping = args.reward_shaping and not args.sparse_rewards
+#         assert max_episode_steps % args.num_action_repeat == 0
+#         return TimeLimit(CarRacingWrapper(env,
+#                 grayscale=args.grayscale, 
+#                 reward_shaping=reward_shaping,
+#                 num_action_repeat=args.num_action_repeat,
+#                 nstack=args.frame_stack,
+#                 crop=args.crop_frame), 
+#             max_episode_steps=max_episode_steps//args.num_action_repeat)
+#     elif args.env_name.startswith('MultiGrid'):
+#         env = gym_make(args.env_name, **env_kwargs)
+#         if args.use_global_critic or args.use_global_policy:
+#             max_episode_steps = env._max_episode_steps
+#             env = TimeLimit(MultiGridFullyObsWrapper(env),
+#                 max_episode_steps=max_episode_steps)
+#         return env
+#     else:
+#         return gym_make(args.env_name, **env_kwargs)
 
 
 def create_parallel_env(args, adversary=True):

@@ -13,6 +13,7 @@ from arguments import parser
 
 import torch
 import gym
+import wandb
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from baselines.logger import HumanOutputFormat
@@ -67,6 +68,11 @@ if __name__ == '__main__':
     if 'cuda' in device.type:
         torch.backends.cudnn.benchmark = True
         print('Using CUDA\n')
+    
+    run = wandb.init(
+        project="Paired",
+        config={"num_agents": 3}
+    )
 
     # === Create parallel envs ===
     venv, ued_venv = create_parallel_env(args)
@@ -237,7 +243,9 @@ if __name__ == '__main__':
                         os.path.join(screenshot_dir, f'update{j}.png'),
                         normalize=True, channels_first=False)
                 plt.close()
-
+        wandb.log(stats, step=j)
+    
+    wandb.finish()
     evaluator.close()
     venv.close()
 

@@ -59,6 +59,7 @@ class RolloutStorage(object):
         self.use_popart = use_popart
 
         self.truncated_obs = None
+        self.obs_ds = torch.zeros(num_steps + 1, num_processes,3,15,15)
         if isinstance(observation_space, dict):
             self.is_dict_obs = True
             self.obs = {k:torch.zeros(num_steps + 1, num_processes, *(observation_space[k]).shape) \
@@ -79,6 +80,7 @@ class RolloutStorage(object):
         self.value_preds = torch.zeros(num_steps + 1, num_processes, 1)
         self.returns = torch.zeros(num_steps + 1, num_processes, 1)
         self.action_log_probs = torch.zeros(num_steps, num_processes, 1)
+        self.step_env = torch.ones(num_processes,1)
 
         if action_space.__class__.__name__ == 'Discrete':
             action_shape = 1
@@ -119,6 +121,7 @@ class RolloutStorage(object):
                 self.obs[k] = obs.to(device)
         else:
             self.obs = self.obs.to(device)
+        self.obs_ds = self.obs_ds.to(device)
         self.recurrent_hidden_states = self.recurrent_hidden_states.to(device)
         self.rewards = self.rewards.to(device)
         self.value_preds = self.value_preds.to(device)
@@ -130,6 +133,7 @@ class RolloutStorage(object):
         self.bad_masks = self.bad_masks.to(device)
         self.cliffhanger_masks = self.cliffhanger_masks.to(device)
         self.level_seeds = self.level_seeds.to(device)
+        self.step_env = self.step_env.to(device)
 
         if self.use_proper_time_limits:
             if self.is_dict_obs:
@@ -182,7 +186,7 @@ class RolloutStorage(object):
 
         if level_seeds is not None:
             self.level_seeds[self.step].copy_(level_seeds)
-
+        self.step_env += 1
         self.step = (self.step + 1) % self.num_steps
 
     def insert_truncated_obs(self, obs, index):
@@ -197,6 +201,7 @@ class RolloutStorage(object):
             [self.obs[k][0].copy_(self.obs[k][-1]) for k in self.obs.keys()]
         else:
             self.obs[0].copy_(self.obs[-1])
+        self.obs_ds[0].copy_(self.obs_ds[-1])
         self.recurrent_hidden_states[0].copy_(self.recurrent_hidden_states[-1])
         self.masks[0].copy_(self.masks[-1])
         self.bad_masks[0].copy_(self.bad_masks[-1])
