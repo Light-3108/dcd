@@ -513,7 +513,8 @@ class AdversarialRunner(object):
 
         # Initialize first observation
         agent.storage.copy_obs_to_index(obs,0)
-        agent.storage.obs_ds[0].copy_(obs['full_obs']) 
+        agent.storage.obs_ds[0].copy_(obs['full_obs'])  
+
         rollout_info = {}
         rollout_returns = [[] for _ in range(args.num_processes)]
         
@@ -524,7 +525,6 @@ class AdversarialRunner(object):
             rollout_info.update({
                 'solved_idx': np.zeros(args.num_processes, dtype=np.bool)
             })
-        
         explorer_rewards = []
         for step in range(num_steps):
             if args.render:
@@ -549,6 +549,7 @@ class AdversarialRunner(object):
                 obs, reward, done, infos = self.venv.step_env(_action, reset_random=reset_random)
                 if args.clip_reward:
                     reward = torch.clamp(reward, -args.clip_reward, args.clip_reward)
+
             int_reward = torch.zeros_like(reward)
             obs_ds = obs['full_obs']
             diff_all = obs_ds.unsqueeze(0) - agent.storage.obs_ds # (257,num_process,3,15,15)
@@ -574,7 +575,6 @@ class AdversarialRunner(object):
                     int_reward[i] = diff.flatten(start_dim=1).norm(p=2, dim=1).sort().values[int(neighbor_size-1)]
                     if i == 0:
                         explorer_rewards.append(int_reward[i].item())
-
             if not is_env and step >= num_steps - 1:
                 # Handle early termination due to cliffhanger rollout
                 if agent.storage.use_proper_time_limits:
@@ -651,13 +651,13 @@ class AdversarialRunner(object):
             agent.insert(
                 obs, recurrent_hidden_states, 
                 action, action_log_prob, action_log_dist, 
-                value, reward, masks, bad_masks, 
+                value, int_reward, masks, bad_masks, 
                 level_seeds=current_level_seeds,
                 cliffhanger_masks=cliffhanger_masks)
             agent.storage.obs_ds[agent.storage.step].copy_(obs_ds)
             if level_sampler and level_replay:
                 self.current_level_seeds = next_level_seeds
-
+        
         # Add generated env to level store (as a constructive string representation)
         if is_env and args.use_plr and not level_replay:
             self._update_plr_with_current_unseen_levels()

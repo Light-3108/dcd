@@ -59,11 +59,14 @@ class RolloutStorage(object):
         self.use_popart = use_popart
 
         self.truncated_obs = None
-        self.obs_ds = torch.zeros(num_steps + 1, num_processes,3,15,15)
+        self.obs_ds = torch.zeros(num_steps + 1, num_processes,3,15,15) # for storing full observations 
         if isinstance(observation_space, dict):
             self.is_dict_obs = True
             self.obs = {k:torch.zeros(num_steps + 1, num_processes, *(observation_space[k]).shape) \
                 for k,obs in observation_space.items()}
+            
+            # if adversary obs space 
+            # {'Image': (257,32,3,15,15), ...}
 
             if self.use_proper_time_limits:
                 self.truncated_obs = {k:torch.zeros(num_steps + 1, num_processes, *(observation_space[k]).shape) \
@@ -196,7 +199,7 @@ class RolloutStorage(object):
         else:
             self.truncated_obs[self.step + 1][index].copy_(to_tensor(obs))
 
-    def after_update(self):
+    def after_update(self): # we haven't step on last obs, so obs[0] = obs[-1], also we don't reset env every update, that's why. 
         if self.is_dict_obs:
             [self.obs[k][0].copy_(self.obs[k][-1]) for k in self.obs.keys()]
         else:

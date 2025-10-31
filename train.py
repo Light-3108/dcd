@@ -10,10 +10,9 @@ import time
 import timeit
 import logging
 from arguments import parser
-
+import wandb
 import torch
 import gym
-import wandb
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from baselines.logger import HumanOutputFormat
@@ -68,15 +67,15 @@ if __name__ == '__main__':
     if 'cuda' in device.type:
         torch.backends.cudnn.benchmark = True
         print('Using CUDA\n')
-    
+
     run = wandb.init(
         project="Paired",
         config={"num_agents": 3}
     )
 
+
     # === Create parallel envs ===
     venv, ued_venv = create_parallel_env(args)
-
     is_training_env = args.ued_algo in ['paired', 'flexible_paired', 'minimax']
     is_paired = args.ued_algo in ['paired', 'flexible_paired']
 
@@ -165,6 +164,7 @@ if __name__ == '__main__':
     update_start_time = timer()
     num_updates = int(args.num_env_steps) // args.num_steps // args.num_processes
     for j in range(initial_update_count, num_updates):
+        print(f"Rollouts: {j}")
         stats = train_runner.run()
 
         # === Perform logging ===

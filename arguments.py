@@ -99,7 +99,7 @@ parser.add_argument(
 parser.add_argument(
     '--num_processes',
     type=int,
-    default=32,
+    default=4,
     help='How many training CPU processes to use for experience collection.')
 parser.add_argument(
     '--num_steps',
@@ -149,7 +149,7 @@ parser.add_argument(
 parser.add_argument(
     '--num_env_steps',
     type=int,
-    default=500000,
+    default=1000000,
     help='Number of environment steps for training.')
 
 # Architecture arguments.
@@ -178,7 +178,7 @@ parser.add_argument(
 parser.add_argument(
     '--ued_algo',
     type=str,
-    default='paired',
+    default='domain_randomization',
     choices=['domain_randomization', 'minimax', 
              'paired', 'flexible_paired', 
              'alp_gmm'],
@@ -388,7 +388,7 @@ parser.add_argument(
 parser.add_argument(
     "--checkpoint_interval", 
     type=int, 
-    default=100,
+    default=1000,
     help="Save model every this many updates.")
 parser.add_argument(
     "--archive_interval", 
@@ -455,7 +455,7 @@ parser.add_argument(
 parser.add_argument(
     '--test_interval',
     type=int,
-    default=250,
+    default=50,
     help='Evaluate on test environments every this many updates.')
 parser.add_argument(
     '--test_num_episodes',
@@ -465,19 +465,19 @@ parser.add_argument(
 parser.add_argument(
     '--test_num_processes',
     type=int,
-    default=2,
+    default=4,
     help='Number of test processes per environment.')
 parser.add_argument(
     '--test_env_names',
     type=str,
-    default='MultiGrid-SixteenRooms-v0,MultiGrid-Labyrinth-v0,MultiGrid-Maze-v0',
+    default='MultiGrid-MiniMaze-v0',
     help='CSV string of test environments for evaluation during training.')
 
 # Environment arguments.
 parser.add_argument(
     '--env_name',
     type=str,
-    default='MultiGrid-GoalLastAdversarial-v0',
+    default='MultiGrid-GoalLastEmptyAdversarialEnv-Edit-v0',
     help='Environment to train on.')
 parser.add_argument(
     '--handle_timelimits',
