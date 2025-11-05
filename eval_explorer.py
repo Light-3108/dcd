@@ -200,7 +200,7 @@ class Evaluator(object):
 
 		# if is_multigrid and kwargs.get('use_global_policy'):
 		# 	env = MultiGridFullyObsWrapper(env, is_adversarial=False)
-		env = MultiGridFullyObsWrapper(env)                     ## one
+		env = MultiGridFullyObsWrapper(env, is_adversarial=False)                     ## one
 		return env
 
 	@staticmethod
@@ -263,7 +263,7 @@ class Evaluator(object):
 			returns = []
 			solved_episodes = 0
 
-			obs = venv.reset_random()
+			obs = venv.reset()
 			recurrent_hidden_states = torch.zeros(
 				self.num_processes, agent.algo.actor_critic.recurrent_hidden_state_size, device=self.device)
 			if agent.algo.actor_critic.is_recurrent and agent.algo.actor_critic.rnn.arch == 'lstm':
@@ -276,10 +276,10 @@ class Evaluator(object):
 			# accumulate reward over episode 
 			# return is mean of the accumulated reward 
 			num_steps = 256
-			explorer_rewards = [[] for _ in range(self.num_processes)]
+			explorer_rewards = [[],[]]
 			obs_ds_store = torch.zeros(num_steps + 1, self.num_processes, 3, 15, 15)
 			obs_ds_store[0].copy_(obs['full_obs'])
-			step_env = [1 for _ in range(self.num_processes)]
+			step_env = [1,1]
 			step = 0
 			while len(returns) < self.num_episodes:
 				# Sample actions
@@ -291,12 +291,13 @@ class Evaluator(object):
 				action = action.cpu().numpy()
 				if not self.is_discrete_actions:
 					action = agent.process_action(action)
-				obs, reward, done, infos = venv.step_env(action, reset_random = True)
+				obs, reward, done, infos = venv.step(action)
 				
-				# interinsic reward
+				# interinsic reward here  
 				int_reward = torch.zeros_like(reward)
 				obs_ds = obs['full_obs']
 				diff_all = obs_ds.unsqueeze(0) - obs_ds_store
+				
 				for i in range(len(done)):
 					if done[i] == 1:
 						step_env[i] = 0
@@ -325,11 +326,7 @@ class Evaluator(object):
 					if 'episode' in info.keys():
 						# returns.append(info['episode']['r'])
 						# ata append mean of the intrinsic reward  
-						if explorer_rewards[i]:
-							returns.append(np.mean(explorer_rewards[i]))
-						else:
-							returns.append(0.0)
-						explorer_rewards[i] = []
+						returns.append(np.mean(explorer_rewards[i]))
 						if returns[-1] > self.solved_threshold:
 							solved_episodes += 1
 						if pbar:
@@ -342,7 +339,8 @@ class Evaluator(object):
 
 						if len(returns) >= self.num_episodes:
 							break
-				step_env = [s + 1 for s in step_env]
+				step_env[0] += 1
+				step_env[1] += 1
 				step  = (step + 1)%num_steps
 				obs_ds_store[step].copy_(obs['full_obs'])
 				if render:

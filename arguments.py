@@ -470,7 +470,7 @@ parser.add_argument(
 parser.add_argument(
     '--test_env_names',
     type=str,
-    default='MultiGrid-MiniMaze-v0',
+    default='MultiGrid-GoalLastEmptyAdversarialEnv-Edit-v0',
     help='CSV string of test environments for evaluation during training.')
 
 # Environment arguments.
